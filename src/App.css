@@ -94,6 +94,12 @@ h1 {
   letter-spacing: -0.02em;
 }
 
+/* "Nothing due" is far longer than "1h 25m" and would spill past the ring at
+   phone widths, so the empty state gets its own size. */
+.donut-center[data-empty] strong {
+  font-size: 1rem;
+}
+
 .donut-center span {
   font-size: 0.75rem;
   color: var(--muted);

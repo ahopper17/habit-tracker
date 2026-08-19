@@ -61,7 +61,7 @@ export default function DonutChart({ plan }) {
         </g>
       </svg>
 
-      <div className="donut-center">
+      <div className="donut-center" data-empty={plan.dueCount === 0 || undefined}>
         {plan.dueCount === 0 ? (
           <>
             <strong>Nothing due</strong>
