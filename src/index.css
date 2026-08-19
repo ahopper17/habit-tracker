@@ -1,15 +1,33 @@
+/*
+ * One palette, defined once as custom properties. Components reference tokens
+ * (--surface, --text) rather than literal colors, so a palette change is an
+ * edit to this block instead of a hunt through every stylesheet.
+ *
+ * Habit colors are deliberately NOT here — they live in lib/palette.js, because
+ * the donut needs them as JavaScript values to draw with.
+ */
 :root {
-  --bg: #12131a;
-  --surface: #1b1d27;
-  --surface-2: #232634;
-  --line: #2f3342;
-  --text: #e7e9f0;
-  --muted: #9aa0b4;
-  --accent: #6ee7a8;
-  --accent-dim: #2b6b4d;
+  --bg: #FBF7F1;          /* warm cream page */
+  --surface: #FFFFFF;
+  --surface-2: #F4EDE4;   /* raised chips, the donut's empty track */
+  --line: #E8DED1;
+  --line-strong: #D8CBB9;
 
-  color-scheme: dark;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --text: #3D3A33;        /* warm near-black, softer than #000 on cream */
+  --muted: #8C8577;
+
+  --accent: #7B9B76;      /* sage */
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E7EFE4;
+  --blush: #E3A0AB;
+  --danger: #C06B62;
+
+  --radius: 14px;
+  --shadow: 0 1px 2px rgba(61, 58, 51, 0.05), 0 8px 24px rgba(61, 58, 51, 0.06);
+
+  /* Tells the browser to render form controls and scrollbars light. */
+  color-scheme: light;
+  font-family: ui-rounded, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -30,6 +48,18 @@ body {
 button {
   font: inherit;
   color: inherit;
+  cursor: pointer;
   /* Stops iOS from flashing a grey box on every tap. */
   -webkit-tap-highlight-color: transparent;
+}
+
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

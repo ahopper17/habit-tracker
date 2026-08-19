@@ -1,38 +1,98 @@
 import { describe, it, expect } from 'vitest'
-import { reducer, loadState, STORAGE_KEY, VERSION } from './useHabitStore.js'
+import { reducer, loadState, migrate, STORAGE_KEY, VERSION, DEFAULT_DURATION, DEFAULT_WAKING_HOURS } from './useHabitStore.js'
+import { EVERY_DAY } from '../lib/schedule.js'
 
-const base = { version: VERSION, habits: [], completions: {} }
-const add = (state, id, name) =>
-  reducer(state, { type: 'habit/add', id, name, createdAt: '2026-08-19T12:00:00.000Z' })
+const base = {
+  version: VERSION,
+  habits: [],
+  completions: {},
+  settings: { wakingHours: DEFAULT_WAKING_HOURS },
+}
+
+const add = (state, id, fields = {}) =>
+  reducer(state, {
+    type: 'habit/add',
+    id,
+    createdAt: '2026-08-19T12:00:00.000Z',
+    name: id,
+    durationMinutes: DEFAULT_DURATION,
+    schedule: EVERY_DAY,
+    ...fields,
+  })
 
 describe('habit/add', () => {
-  it('appends a habit', () => {
-    const s = add(base, 'a', 'Read')
-    expect(s.habits).toEqual([{ id: 'a', name: 'Read', createdAt: '2026-08-19T12:00:00.000Z' }])
+  it('stores duration, schedule, and color', () => {
+    const s = add(base, 'a', { name: 'Read', durationMinutes: 30, schedule: [1, 3, 5] })
+    expect(s.habits[0]).toMatchObject({
+      id: 'a',
+      name: 'Read',
+      durationMinutes: 30,
+      schedule: [1, 3, 5],
+    })
+    expect(typeof s.habits[0].color).toBe('string')
   })
 
   it('trims the name and rejects blank ones', () => {
-    expect(add(base, 'a', '  Read  ').habits[0].name).toBe('Read')
-    expect(add(base, 'a', '   ')).toBe(base)
+    expect(add(base, 'a', { name: '  Read  ' }).habits[0].name).toBe('Read')
+    expect(add(base, 'a', { name: '   ' })).toBe(base)
+  })
+
+  it('defaults to a daily schedule', () => {
+    expect(add(base, 'a', { schedule: undefined }).habits[0].schedule).toEqual(EVERY_DAY)
+  })
+
+  it('normalizes a messy schedule', () => {
+    expect(add(base, 'a', { schedule: [5, 1, 1, 9] }).habits[0].schedule).toEqual([1, 5])
+  })
+
+  it('clamps nonsense durations', () => {
+    expect(add(base, 'a', { durationMinutes: 0 }).habits[0].durationMinutes).toBe(DEFAULT_DURATION)
+    expect(add(base, 'a', { durationMinutes: -5 }).habits[0].durationMinutes).toBe(DEFAULT_DURATION)
+    expect(add(base, 'a', { durationMinutes: 'abc' }).habits[0].durationMinutes).toBe(DEFAULT_DURATION)
+    expect(add(base, 'a', { durationMinutes: 99999 }).habits[0].durationMinutes).toBe(1440)
+    expect(add(base, 'a', { durationMinutes: 20.6 }).habits[0].durationMinutes).toBe(21)
+  })
+
+  it('gives each new habit a distinct color', () => {
+    const s = add(add(add(base, 'a'), 'b'), 'c')
+    const colors = s.habits.map((h) => h.color)
+    expect(new Set(colors).size).toBe(3)
   })
 })
 
-describe('habit/rename', () => {
-  it('renames only the target habit', () => {
-    let s = add(add(base, 'a', 'Read'), 'b', 'Walk')
-    s = reducer(s, { type: 'habit/rename', id: 'b', name: 'Run' })
-    expect(s.habits.map((h) => h.name)).toEqual(['Read', 'Run'])
+describe('habit/update', () => {
+  it('changes only the fields provided', () => {
+    const s = add(base, 'a', { name: 'Read', durationMinutes: 30, schedule: [1] })
+    const next = reducer(s, { type: 'habit/update', id: 'a', fields: { name: 'Reading' } })
+    expect(next.habits[0]).toMatchObject({ name: 'Reading', durationMinutes: 30, schedule: [1] })
+  })
+
+  it('updates duration, schedule, and color', () => {
+    const s = add(base, 'a')
+    const next = reducer(s, {
+      type: 'habit/update',
+      id: 'a',
+      fields: { durationMinutes: 45, schedule: [0, 6], color: 'blush' },
+    })
+    expect(next.habits[0]).toMatchObject({ durationMinutes: 45, schedule: [0, 6], color: 'blush' })
   })
 
   it('ignores a blank rename', () => {
-    const s = add(base, 'a', 'Read')
-    expect(reducer(s, { type: 'habit/rename', id: 'a', name: ' ' })).toBe(s)
+    const s = add(base, 'a', { name: 'Read' })
+    const next = reducer(s, { type: 'habit/update', id: 'a', fields: { name: '  ' } })
+    expect(next.habits[0].name).toBe('Read')
+  })
+
+  it('leaves other habits alone', () => {
+    const s = add(add(base, 'a', { name: 'A' }), 'b', { name: 'B' })
+    const next = reducer(s, { type: 'habit/update', id: 'b', fields: { name: 'Bee' } })
+    expect(next.habits.map((h) => h.name)).toEqual(['A', 'Bee'])
   })
 })
 
 describe('habit/remove', () => {
   it('removes the habit and its completions', () => {
-    let s = add(add(base, 'a', 'Read'), 'b', 'Walk')
+    let s = add(add(base, 'a'), 'b')
     s = reducer(s, { type: 'day/toggle', habitId: 'a', dayKey: '2026-08-19' })
     s = reducer(s, { type: 'day/toggle', habitId: 'b', dayKey: '2026-08-19' })
     s = reducer(s, { type: 'habit/remove', id: 'a' })
@@ -42,7 +102,7 @@ describe('habit/remove', () => {
 })
 
 describe('habit/move', () => {
-  const three = () => add(add(add(base, 'a', 'A'), 'b', 'B'), 'c', 'C')
+  const three = () => add(add(add(base, 'a'), 'b'), 'c')
 
   it('moves a habit up and down', () => {
     expect(reducer(three(), { type: 'habit/move', id: 'c', delta: -1 }).habits.map((h) => h.id))
@@ -56,21 +116,27 @@ describe('habit/move', () => {
     expect(reducer(s, { type: 'habit/move', id: 'a', delta: -1 })).toBe(s)
     expect(reducer(s, { type: 'habit/move', id: 'c', delta: 1 })).toBe(s)
   })
+
+  it('does not reshuffle colors', () => {
+    const s = three()
+    const byId = Object.fromEntries(s.habits.map((h) => [h.id, h.color]))
+    const moved = reducer(s, { type: 'habit/move', id: 'c', delta: -1 })
+    moved.habits.forEach((h) => expect(h.color).toBe(byId[h.id]))
+  })
 })
 
 describe('day/toggle', () => {
   it('turns a day on, then deletes the key when turned back off', () => {
-    let s = add(base, 'a', 'Read')
+    let s = add(base, 'a')
     s = reducer(s, { type: 'day/toggle', habitId: 'a', dayKey: '2026-08-19' })
     expect(s.completions.a).toEqual({ '2026-08-19': true })
 
     s = reducer(s, { type: 'day/toggle', habitId: 'a', dayKey: '2026-08-19' })
-    expect(s.completions.a).toEqual({})
     expect('2026-08-19' in s.completions.a).toBe(false)
   })
 
   it('keeps other days and habits untouched', () => {
-    let s = add(add(base, 'a', 'Read'), 'b', 'Walk')
+    let s = add(add(base, 'a'), 'b')
     s = reducer(s, { type: 'day/toggle', habitId: 'a', dayKey: '2026-08-18' })
     s = reducer(s, { type: 'day/toggle', habitId: 'a', dayKey: '2026-08-19' })
     s = reducer(s, { type: 'day/toggle', habitId: 'b', dayKey: '2026-08-19' })
@@ -81,10 +147,51 @@ describe('day/toggle', () => {
   })
 
   it('does not mutate the previous state', () => {
-    const s = add(base, 'a', 'Read')
+    const s = add(base, 'a')
     const next = reducer(s, { type: 'day/toggle', habitId: 'a', dayKey: '2026-08-19' })
     expect(s.completions).toEqual({})
     expect(next).not.toBe(s)
+  })
+})
+
+describe('settings/update', () => {
+  it('changes waking hours', () => {
+    expect(reducer(base, { type: 'settings/update', fields: { wakingHours: 14 } }).settings)
+      .toEqual({ wakingHours: 14 })
+  })
+})
+
+describe('migrate', () => {
+  it('upgrades a v1 blob without losing data', () => {
+    const v1 = {
+      version: 1,
+      habits: [
+        { id: 'a', name: 'Read', createdAt: 'x' },
+        { id: 'b', name: 'Walk', createdAt: 'y' },
+      ],
+      completions: { a: { '2026-08-19': true } },
+    }
+    const v2 = migrate(v1)
+
+    expect(v2.version).toBe(VERSION)
+    expect(v2.completions).toEqual(v1.completions)
+    expect(v2.settings).toEqual({ wakingHours: DEFAULT_WAKING_HOURS })
+    v2.habits.forEach((h) => {
+      expect(h.durationMinutes).toBe(DEFAULT_DURATION)
+      expect(h.schedule).toEqual(EVERY_DAY)
+      expect(typeof h.color).toBe('string')
+    })
+    expect(v2.habits[0].color).not.toBe(v2.habits[1].color)
+  })
+
+  it('leaves an already-migrated blob untouched', () => {
+    const v2 = {
+      version: 2,
+      habits: [{ id: 'a', name: 'Read', createdAt: 'x', durationMinutes: 45, schedule: [1], color: 'blush' }],
+      completions: {},
+      settings: { wakingHours: 12 },
+    }
+    expect(migrate(v2)).toEqual(v2)
   })
 })
 
@@ -104,9 +211,16 @@ describe('loadState', () => {
     expect(loadState(fakeStorage())).toEqual(base)
   })
 
-  it('reads a valid blob back', () => {
-    const saved = { version: 1, habits: [{ id: 'a', name: 'Read', createdAt: 'x' }], completions: { a: { '2026-08-19': true } } }
-    expect(loadState(fakeStorage({ [STORAGE_KEY]: JSON.stringify(saved) }))).toEqual(saved)
+  it('migrates a saved v1 blob on read', () => {
+    const v1 = JSON.stringify({
+      version: 1,
+      habits: [{ id: 'a', name: 'Read', createdAt: 'x' }],
+      completions: { a: { '2026-08-19': true } },
+    })
+    const loaded = loadState(fakeStorage({ [STORAGE_KEY]: v1 }))
+    expect(loaded.version).toBe(VERSION)
+    expect(loaded.habits[0].durationMinutes).toBe(DEFAULT_DURATION)
+    expect(loaded.completions).toEqual({ a: { '2026-08-19': true } })
   })
 
   it('falls back and backs up when the JSON is broken', () => {

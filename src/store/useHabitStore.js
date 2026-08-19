@@ -1,9 +1,19 @@
-import { useCallback, useEffect, useReducer, useRef } from 'react'
+import { useEffect, useMemo, useReducer, useRef } from 'react'
+import { EVERY_DAY, normalizeSchedule } from '../lib/schedule.js'
+import { HABIT_COLORS, nextColor } from '../lib/palette.js'
 
 export const STORAGE_KEY = 'habit-tracker'
-export const VERSION = 1
+export const VERSION = 2
 
-const EMPTY = { version: VERSION, habits: [], completions: {} }
+export const DEFAULT_DURATION = 20
+export const DEFAULT_WAKING_HOURS = 16
+
+const EMPTY = {
+  version: VERSION,
+  habits: [],
+  completions: {},
+  settings: { wakingHours: DEFAULT_WAKING_HOURS },
+}
 
 /**
  * Read the saved blob. Anything unreadable falls back to an empty tracker
@@ -33,12 +43,29 @@ export function loadState(storage = globalThis.localStorage) {
 }
 
 /**
- * Bring an older blob up to the current shape. There is only one version so
- * far, but the hook exists now so that v2 has an obvious place to live and
- * old installs never need a manual reset.
+ * Bring an older blob up to the current shape.
+ *
+ * v1 habits were {id, name, createdAt}. v2 adds duration, schedule, and color.
+ * Filling defaults here rather than guarding for undefined at every read site
+ * means the rest of the app only ever sees one shape — and nobody has to clear
+ * localStorage to pick up the new fields.
  */
-function migrate(state) {
-  return { ...state, version: VERSION }
+export function migrate(state) {
+  const habits = state.habits.map((habit, i) => ({
+    ...habit,
+    durationMinutes: habit.durationMinutes ?? DEFAULT_DURATION,
+    schedule: normalizeSchedule(habit.schedule ?? EVERY_DAY),
+    // Assigned by position only for habits that predate colors; from here on
+    // the color is chosen at creation and never shifts when the list reorders.
+    color: habit.color ?? HABIT_COLORS[i % HABIT_COLORS.length].id,
+  }))
+
+  return {
+    ...state,
+    version: VERSION,
+    habits,
+    settings: { wakingHours: state.settings?.wakingHours ?? DEFAULT_WAKING_HOURS },
+  }
 }
 
 function save(state, storage = globalThis.localStorage) {
@@ -55,6 +82,13 @@ function newId() {
   return globalThis.crypto?.randomUUID?.() ?? `h_${Date.now().toString(36)}`
 }
 
+/** Clamp a duration to something a day can actually hold. */
+function cleanDuration(value) {
+  const n = Math.round(Number(value))
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_DURATION
+  return Math.min(n, 24 * 60)
+}
+
 /**
  * Every state change goes through here, so the persist effect below only has
  * to watch one value. Reducers must stay pure: no Date.now(), no randomUUID —
@@ -63,20 +97,46 @@ function newId() {
 export function reducer(state, action) {
   switch (action.type) {
     case 'habit/add': {
-      const name = action.name.trim()
+      const name = action.name?.trim()
       if (!name) return state
       return {
         ...state,
-        habits: [...state.habits, { id: action.id, name, createdAt: action.createdAt }],
+        habits: [
+          ...state.habits,
+          {
+            id: action.id,
+            name,
+            createdAt: action.createdAt,
+            durationMinutes: cleanDuration(action.durationMinutes),
+            schedule: normalizeSchedule(action.schedule ?? EVERY_DAY),
+            color: action.color ?? nextColor(state.habits.map((h) => h.color)),
+          },
+        ],
       }
     }
 
-    case 'habit/rename': {
-      const name = action.name.trim()
-      if (!name) return state
+    case 'habit/update': {
+      // Only the keys present in `fields` change, so the setup sheet can save a
+      // rename without having to resend duration, schedule, and color.
+      const { fields } = action
       return {
         ...state,
-        habits: state.habits.map((h) => (h.id === action.id ? { ...h, name } : h)),
+        habits: state.habits.map((h) => {
+          if (h.id !== action.id) return h
+          const next = { ...h }
+          if (fields.name !== undefined) {
+            const name = fields.name.trim()
+            if (name) next.name = name
+          }
+          if (fields.durationMinutes !== undefined) {
+            next.durationMinutes = cleanDuration(fields.durationMinutes)
+          }
+          if (fields.schedule !== undefined) {
+            next.schedule = normalizeSchedule(fields.schedule)
+          }
+          if (fields.color !== undefined) next.color = fields.color
+          return next
+        }),
       }
     }
 
@@ -115,6 +175,9 @@ export function reducer(state, action) {
       return { ...state, completions: { ...state.completions, [action.habitId]: next } }
     }
 
+    case 'settings/update':
+      return { ...state, settings: { ...state.settings, ...action.fields } }
+
     default:
       return state
   }
@@ -140,35 +203,29 @@ export function useHabitStore() {
     save(state)
   }, [state])
 
-  const addHabit = useCallback((name) => {
-    // toISOString is right here and only here: createdAt is an *instant*, not a
-    // day key. The no-toISOString rule applies to day keys, which must be local.
-    dispatch({ type: 'habit/add', id: newId(), name, createdAt: new Date().toISOString() })
-  }, [])
+  const actions = useMemo(
+    () => ({
+      addHabit: ({ name, durationMinutes, schedule, color }) =>
+        dispatch({
+          type: 'habit/add',
+          id: newId(),
+          // toISOString is right here and only here: createdAt is an *instant*,
+          // not a day key. The no-toISOString rule applies to day keys.
+          createdAt: new Date().toISOString(),
+          name,
+          durationMinutes,
+          schedule,
+          color,
+        }),
+      updateHabit: (id, fields) => dispatch({ type: 'habit/update', id, fields }),
+      removeHabit: (id) => dispatch({ type: 'habit/remove', id }),
+      moveHabit: (id, delta) => dispatch({ type: 'habit/move', id, delta }),
+      toggleDay: (habitId, dayKey) => dispatch({ type: 'day/toggle', habitId, dayKey }),
+      setWakingHours: (wakingHours) =>
+        dispatch({ type: 'settings/update', fields: { wakingHours } }),
+    }),
+    [],
+  )
 
-  const renameHabit = useCallback((id, name) => {
-    dispatch({ type: 'habit/rename', id, name })
-  }, [])
-
-  const removeHabit = useCallback((id) => {
-    dispatch({ type: 'habit/remove', id })
-  }, [])
-
-  const moveHabit = useCallback((id, delta) => {
-    dispatch({ type: 'habit/move', id, delta })
-  }, [])
-
-  const toggleDay = useCallback((habitId, dayKey) => {
-    dispatch({ type: 'day/toggle', habitId, dayKey })
-  }, [])
-
-  return {
-    habits: state.habits,
-    completions: state.completions,
-    addHabit,
-    renameHabit,
-    removeHabit,
-    moveHabit,
-    toggleDay,
-  }
+  return { habits: state.habits, completions: state.completions, settings: state.settings, ...actions }
 }
