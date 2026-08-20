@@ -4,6 +4,32 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Habits</title>
+    <meta name="description" content="A quiet habit tracker." />
+
+    <!--
+      %BASE_URL% is substituted by Vite at build time with the `base` from
+      vite.config.js ("/habit-tracker/"). Hardcoding "/" here would 404 on
+      GitHub Pages; hardcoding "/habit-tracker/" would break `npm run dev`,
+      which serves from the root. This one token is correct in both.
+    -->
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="%BASE_URL%favicon.png" />
+
+    <!-- Paints the browser UI and the standalone status bar to match the page,
+         so the app doesn't sit under a white or black strip. -->
+    <meta name="theme-color" content="#FBF7F1" />
+
+    <!-- iOS ignores most of the web manifest, so the same intent has to be
+         restated in Apple's own meta tags. -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <!-- "default" keeps dark status-bar text, which is what a cream page needs.
+         "black-translucent" would let the page slide under the clock. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- The home-screen label. Without it iOS uses <title>, which can be
+         truncated differently. -->
+    <meta name="apple-mobile-web-app-title" content="Habits" />
+    <link rel="apple-touch-icon" href="%BASE_URL%apple-touch-icon.png" />
   </head>
   <body>
     <div id="root"></div>

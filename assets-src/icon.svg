@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Full-bleed background: maskable icons get cropped to a circle/squircle by
+       Android, so the art must reach every edge and keep anything important
+       inside the middle 80%. -->
+  <rect width="512" height="512" fill="#7B9B76"/>
+  <g transform="rotate(-90 256 256)" fill="none" stroke-linecap="butt" stroke-width="52">
+    <circle cx="256" cy="256" r="140" stroke="#FBF7F1" stroke-opacity="0.3"/>
+    <circle cx="256" cy="256" r="140" stroke="#FBF7F1"
+            stroke-dasharray="263.9 615.7"/>
+    <circle cx="256" cy="256" r="140" stroke="#E3A0AB"
+            stroke-dasharray="105.6 774.0" stroke-dashoffset="-263.9"/>
+  </g>
+</svg>
