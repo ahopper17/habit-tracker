@@ -9,7 +9,7 @@ import { colorHex } from '../lib/palette.js'
  * header stays while you scroll back through months, the dates stay while you
  * scroll sideways through habits.
  */
-export default function HabitGrid({ habits, rows, tallies, onToggle }) {
+export default function HabitGrid({ habits, rows, tallies, onToggle, onPickDay }) {
   return (
     <div className="grid-scroll">
       <div className="grid" style={{ '--habit-count': habits.length }}>
@@ -37,26 +37,45 @@ export default function HabitGrid({ habits, rows, tallies, onToggle }) {
           // Fragment keyed by day: the date cell and its habit cells are
           // siblings in the grid, not wrapped in a row element, because a
           // wrapper would break the column tracks.
-          <Row key={row.key} row={row} onToggle={onToggle} habits={habits} />
+          <Row key={row.key} row={row} onToggle={onToggle} onPickDay={onPickDay} habits={habits} />
         ))}
       </div>
     </div>
   )
 }
 
-function Row({ row, habits, onToggle }) {
+function Row({ row, habits, onToggle, onPickDay }) {
   return (
     <>
-      <div className="grid-date" data-today={row.isToday || undefined}>
+      {/* The date cell is the handle for the whole day: tapping it is how a day
+          gets marked off, which keeps that action on the row it applies to
+          rather than in a separate date-picking flow. */}
+      <button
+        type="button"
+        className="grid-date"
+        data-today={row.isToday || undefined}
+        data-dayoff={row.dayOff ? '' : undefined}
+        data-future={row.isFuture || undefined}
+        onClick={() => onPickDay?.(row.key)}
+        aria-label={`${row.weekday} ${row.monthDay}${row.dayOff ? `, day off${row.dayOff.note ? `: ${row.dayOff.note}` : ''}` : ''}`}
+      >
         <span className="date-weekday">{row.weekday}</span>
         <span className="date-monthday">{row.monthDay}</span>
-      </div>
+        {row.dayOff && <span className="date-off" aria-hidden="true">off</span>}
+      </button>
 
       {row.cells.map((cell, i) => {
         const habit = habits[i]
-        const interactive = cell.state !== 'before'
+        // Nothing to tick before a habit existed, and ticking tomorrow is not a
+        // thing you can truthfully do.
+        const interactive = cell.state !== 'before' && cell.state !== 'future'
         return (
-          <div className="grid-cell" key={cell.habitId} data-today={row.isToday || undefined}>
+          <div
+            className="grid-cell"
+            key={cell.habitId}
+            data-today={row.isToday || undefined}
+            data-dayoff={row.dayOff ? '' : undefined}
+          >
             {interactive ? (
               <button
                 type="button"
@@ -79,11 +98,12 @@ function Row({ row, habits, onToggle }) {
   )
 }
 
-const MARKS = { done: '✓', bonus: '✓', open: '', off: '·', before: '' }
+const MARKS = { done: '✓', bonus: '✓', open: '', off: '·', before: '', future: '' }
 const LABELS = {
   done: 'done',
   bonus: 'done, not scheduled',
   open: 'not done',
   off: 'rest day',
   before: '',
+  future: '',
 }

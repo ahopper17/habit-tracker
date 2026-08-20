@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { lastNDays } from '../lib/dates.js'
-import { buildHistory } from '../lib/history.js'
+import { buildHistory, upcomingDaysOff } from '../lib/history.js'
 import HabitGrid from './HabitGrid.jsx'
 
 const PAGE = 30
 
-export default function HistoryView({ habits, completions, today, onToggle }) {
+export default function HistoryView({ habits, completions, daysOff, today, onToggle, onPickDayOff, onEditDayOff }) {
   // How far back the grid reaches. Kept here rather than in the store because
   // it is view state — how much you happen to be looking at right now is not
   // something that should be saved to localStorage or survive a reload.
@@ -15,15 +15,27 @@ export default function HistoryView({ habits, completions, today, onToggle }) {
     return <p className="empty">Add a habit and its history will show up here.</p>
   }
 
-  const dayKeys = lastNDays(dayCount, today)
-  const { rows, tallies } = buildHistory(habits, completions, dayKeys, today)
+  // Future days appear only if they were flagged in advance. Padding the top of
+  // the grid with a fixed week of empty rows would be clutter every other day
+  // of the year; a planned day off is the one future thing worth seeing coming.
+  const dayKeys = [...upcomingDaysOff(daysOff, today), ...lastNDays(dayCount, today)]
+  const { rows, tallies } = buildHistory(habits, completions, dayKeys, today, daysOff)
 
   return (
     <>
-      <HabitGrid habits={habits} rows={rows} tallies={tallies} onToggle={onToggle} />
+      <HabitGrid
+        habits={habits}
+        rows={rows}
+        tallies={tallies}
+        onToggle={onToggle}
+        onPickDay={onEditDayOff}
+      />
       <div className="more">
         <button type="button" className="btn-quiet" onClick={() => setDayCount((n) => n + PAGE)}>
           Show {PAGE} more days
+        </button>
+        <button type="button" className="btn-quiet" onClick={onPickDayOff}>
+          Plan a day off
         </button>
       </div>
     </>

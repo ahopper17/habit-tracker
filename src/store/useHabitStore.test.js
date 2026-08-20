@@ -6,6 +6,7 @@ const base = {
   version: VERSION,
   habits: [],
   completions: {},
+  daysOff: {},
   settings: { wakingHours: DEFAULT_WAKING_HOURS },
 }
 
@@ -154,6 +155,43 @@ describe('day/toggle', () => {
   })
 })
 
+describe('dayoff/set and dayoff/clear', () => {
+  it('records a day off with a note', () => {
+    const s = reducer(base, { type: 'dayoff/set', dayKey: '2026-08-26', note: 'Sam visiting' })
+    expect(s.daysOff).toEqual({ '2026-08-26': { note: 'Sam visiting' } })
+  })
+
+  it('allows a day off with no note', () => {
+    const s = reducer(base, { type: 'dayoff/set', dayKey: '2026-08-26' })
+    expect(s.daysOff['2026-08-26']).toEqual({ note: '' })
+  })
+
+  it('trims the note', () => {
+    const s = reducer(base, { type: 'dayoff/set', dayKey: '2026-08-26', note: '  rest  ' })
+    expect(s.daysOff['2026-08-26'].note).toBe('rest')
+  })
+
+  it('overwrites an existing note for the same day', () => {
+    let s = reducer(base, { type: 'dayoff/set', dayKey: '2026-08-26', note: 'first' })
+    s = reducer(s, { type: 'dayoff/set', dayKey: '2026-08-26', note: 'second' })
+    expect(s.daysOff['2026-08-26'].note).toBe('second')
+  })
+
+  it('clears one day without touching the others', () => {
+    let s = reducer(base, { type: 'dayoff/set', dayKey: '2026-08-26', note: 'a' })
+    s = reducer(s, { type: 'dayoff/set', dayKey: '2026-08-27', note: 'b' })
+    s = reducer(s, { type: 'dayoff/clear', dayKey: '2026-08-26' })
+    expect(Object.keys(s.daysOff)).toEqual(['2026-08-27'])
+  })
+
+  it('leaves completions alone', () => {
+    let s = add(base, 'a')
+    s = reducer(s, { type: 'day/toggle', habitId: 'a', dayKey: '2026-08-26' })
+    s = reducer(s, { type: 'dayoff/set', dayKey: '2026-08-26', note: 'off' })
+    expect(s.completions.a).toEqual({ '2026-08-26': true })
+  })
+})
+
 describe('settings/update', () => {
   it('changes waking hours', () => {
     expect(reducer(base, { type: 'settings/update', fields: { wakingHours: 14 } }).settings)
@@ -184,14 +222,41 @@ describe('migrate', () => {
     expect(v2.habits[0].color).not.toBe(v2.habits[1].color)
   })
 
-  it('leaves an already-migrated blob untouched', () => {
+  it('adds daysOff when upgrading a v2 blob', () => {
     const v2 = {
       version: 2,
       habits: [{ id: 'a', name: 'Read', createdAt: 'x', durationMinutes: 45, schedule: [1], color: 'blush' }],
-      completions: {},
+      completions: { a: { '2026-08-19': true } },
       settings: { wakingHours: 12 },
     }
-    expect(migrate(v2)).toEqual(v2)
+    const v3 = migrate(v2)
+    expect(v3.version).toBe(VERSION)
+    expect(v3.daysOff).toEqual({})
+    expect(v3.completions).toEqual(v2.completions)
+    expect(v3.settings).toEqual({ wakingHours: 12 })
+    expect(v3.habits).toEqual(v2.habits)
+  })
+
+  it('preserves existing days off', () => {
+    const v3 = migrate({
+      version: 3,
+      habits: [],
+      completions: {},
+      daysOff: { '2026-08-26': { note: 'Sam' } },
+      settings: { wakingHours: 16 },
+    })
+    expect(v3.daysOff).toEqual({ '2026-08-26': { note: 'Sam' } })
+  })
+
+  it('leaves an already-migrated blob untouched', () => {
+    const v3 = {
+      version: 3,
+      habits: [{ id: 'a', name: 'Read', createdAt: 'x', durationMinutes: 45, schedule: [1], color: 'blush' }],
+      completions: {},
+      daysOff: {},
+      settings: { wakingHours: 12 },
+    }
+    expect(migrate(v3)).toEqual(v3)
   })
 })
 

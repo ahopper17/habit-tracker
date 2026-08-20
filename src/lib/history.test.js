@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildHistory, cellState, createdDayKey } from './history.js'
+import { buildHistory, cellState, createdDayKey, upcomingDaysOff } from './history.js'
 import { EVERY_DAY } from './schedule.js'
 import { lastNDays } from './dates.js'
 
@@ -52,6 +52,24 @@ describe('cellState', () => {
     expect(cellState(h, '2026-08-10', {})).toBe('before')
     expect(cellState(h, '2026-08-19', {})).toBe('open')
   })
+
+  it('is future for days after today', () => {
+    expect(cellState(habit('a'), '2026-08-25', {}, { todayK: TODAY })).toBe('future')
+    expect(cellState(habit('a'), TODAY, {}, { todayK: TODAY })).toBe('open')
+  })
+
+  it('excuses a scheduled day when the whole day is off', () => {
+    expect(cellState(habit('a'), '2026-08-17', {}, { isDayOff: true })).toBe('off')
+  })
+
+  it('counts work done on a day off as a bonus', () => {
+    expect(cellState(habit('a'), '2026-08-19', completions, { isDayOff: true })).toBe('bonus')
+  })
+
+  it('lets before win over a day off', () => {
+    const h = habit('a', EVERY_DAY, '2026-08-18T12:00:00.000Z')
+    expect(cellState(h, '2026-08-10', {}, { isDayOff: true })).toBe('before')
+  })
 })
 
 describe('buildHistory', () => {
@@ -99,10 +117,57 @@ describe('buildHistory', () => {
     expect(tallies.a).toEqual({ done: 0, scheduled: 2 })
   })
 
+  it('marks a day off on the row and drops it from the tally', () => {
+    const daysOff = { '2026-08-18': { note: 'Sam visiting' } }
+    const { rows, tallies } = buildHistory(
+      [habit('a')], {}, lastNDays(3, TODAY), TODAY, daysOff,
+    )
+    const row = rows.find((r) => r.key === '2026-08-18')
+    expect(row.dayOff).toEqual({ note: 'Sam visiting' })
+    expect(row.cells[0].state).toBe('off')
+    // Three days back, one taken off: scored out of two, not three.
+    expect(tallies.a).toEqual({ done: 0, scheduled: 2 })
+  })
+
+  it('does not let a day off reduce credit already earned', () => {
+    const completions = { a: { '2026-08-18': true } }
+    const daysOff = { '2026-08-18': { note: '' } }
+    const { tallies } = buildHistory([habit('a')], completions, lastNDays(3, TODAY), TODAY, daysOff)
+    // The work still shows as a bonus in the grid; it just is not scored.
+    expect(tallies.a).toEqual({ done: 0, scheduled: 2 })
+  })
+
+  it('flags future rows and does not tally them', () => {
+    const dayKeys = ['2026-08-22', '2026-08-21', TODAY]
+    const { rows, tallies } = buildHistory([habit('a')], {}, dayKeys, TODAY)
+    expect(rows[0]).toMatchObject({ isFuture: true, isToday: false })
+    expect(rows[0].cells[0].state).toBe('future')
+    expect(rows[2].isToday).toBe(true)
+    expect(tallies.a).toEqual({ done: 0, scheduled: 1 })
+  })
+
   it('handles no habits', () => {
     const { rows, tallies } = buildHistory([], {}, lastNDays(2, TODAY), TODAY)
     expect(rows).toHaveLength(2)
     expect(rows[0].cells).toEqual([])
     expect(tallies).toEqual({})
+  })
+})
+
+
+describe('upcomingDaysOff', () => {
+  it('returns only future keys, soonest last', () => {
+    const daysOff = {
+      '2026-08-10': { note: 'past' },
+      '2026-08-25': { note: 'later' },
+      '2026-08-22': { note: 'soon' },
+      [TODAY]: { note: 'today' },
+    }
+    expect(upcomingDaysOff(daysOff, TODAY)).toEqual(['2026-08-25', '2026-08-22'])
+  })
+
+  it('handles nothing scheduled', () => {
+    expect(upcomingDaysOff({}, TODAY)).toEqual([])
+    expect(upcomingDaysOff(undefined, TODAY)).toEqual([])
   })
 })

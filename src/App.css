@@ -656,3 +656,81 @@ h1 {
   color: var(--accent);
   font-weight: 600;
 }
+
+/* ---------- days off ---------- */
+
+.dayoff-card {
+  text-align: center;
+  display: grid;
+  gap: 0.6rem;
+  justify-items: center;
+}
+
+.dayoff-card h2 {
+  margin: 0;
+  font-size: 1.35rem;
+  letter-spacing: -0.02em;
+}
+
+.dayoff-note {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.muted-note {
+  color: var(--muted);
+}
+
+/* The date cell is a button now, so it has to be un-styled back into a cell. */
+.grid-date {
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-top: 0;
+  border-left: 0;
+  border-right: 1px solid var(--line);
+}
+
+.grid-date[data-dayoff],
+.grid-cell[data-dayoff] {
+  /* A blush wash rather than the sage "today" tint, so a day off is visibly a
+     different kind of day rather than a better or worse one. */
+  background: color-mix(in srgb, var(--blush) 16%, var(--surface));
+}
+
+/* Today wins if today is also a day off — you still want to find today. */
+.grid-date[data-today],
+.grid-cell[data-today] {
+  background: var(--accent-soft);
+}
+
+.grid-date[data-future] {
+  opacity: 0.75;
+}
+
+.date-off {
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--blush);
+  font-weight: 700;
+}
+
+.more {
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.sheet-lede {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.sheet-day {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}

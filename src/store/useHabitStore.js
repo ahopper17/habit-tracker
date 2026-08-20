@@ -3,7 +3,7 @@ import { EVERY_DAY, normalizeSchedule } from '../lib/schedule.js'
 import { HABIT_COLORS, nextColor } from '../lib/palette.js'
 
 export const STORAGE_KEY = 'habit-tracker'
-export const VERSION = 2
+export const VERSION = 3
 
 export const DEFAULT_DURATION = 20
 export const DEFAULT_WAKING_HOURS = 16
@@ -12,6 +12,13 @@ const EMPTY = {
   version: VERSION,
   habits: [],
   completions: {},
+  // Days deliberately taken off, with an optional note: { "2026-08-26": { note } }.
+  //
+  // Deliberately its own top-level key rather than something inside
+  // `completions`. A day off is a THIRD state — not a completion and not a
+  // miss — and folding it into the completions map would force it to pretend
+  // to be one of the other two.
+  daysOff: {},
   settings: { wakingHours: DEFAULT_WAKING_HOURS },
 }
 
@@ -46,9 +53,12 @@ export function loadState(storage = globalThis.localStorage) {
  * Bring an older blob up to the current shape.
  *
  * v1 habits were {id, name, createdAt}. v2 adds duration, schedule, and color.
- * Filling defaults here rather than guarding for undefined at every read site
- * means the rest of the app only ever sees one shape — and nobody has to clear
- * localStorage to pick up the new fields.
+ * v3 adds daysOff. Filling defaults here rather than guarding for undefined at
+ * every read site means the rest of the app only ever sees one shape — and
+ * nobody has to clear localStorage to pick up the new fields.
+ *
+ * Note this is additive at every step, so it is safe to run on data of any
+ * version, including data already current.
  */
 export function migrate(state) {
   const habits = state.habits.map((habit, i) => ({
@@ -64,6 +74,7 @@ export function migrate(state) {
     ...state,
     version: VERSION,
     habits,
+    daysOff: state.daysOff ?? {},
     settings: { wakingHours: state.settings?.wakingHours ?? DEFAULT_WAKING_HOURS },
   }
 }
@@ -175,6 +186,17 @@ export function reducer(state, action) {
       return { ...state, completions: { ...state.completions, [action.habitId]: next } }
     }
 
+    case 'dayoff/set':
+      return {
+        ...state,
+        daysOff: { ...state.daysOff, [action.dayKey]: { note: (action.note ?? '').trim() } },
+      }
+
+    case 'dayoff/clear': {
+      const { [action.dayKey]: _cleared, ...daysOff } = state.daysOff
+      return { ...state, daysOff }
+    }
+
     case 'settings/update':
       return { ...state, settings: { ...state.settings, ...action.fields } }
 
@@ -221,11 +243,19 @@ export function useHabitStore() {
       removeHabit: (id) => dispatch({ type: 'habit/remove', id }),
       moveHabit: (id, delta) => dispatch({ type: 'habit/move', id, delta }),
       toggleDay: (habitId, dayKey) => dispatch({ type: 'day/toggle', habitId, dayKey }),
+      setDayOff: (dayKey, note) => dispatch({ type: 'dayoff/set', dayKey, note }),
+      clearDayOff: (dayKey) => dispatch({ type: 'dayoff/clear', dayKey }),
       setWakingHours: (wakingHours) =>
         dispatch({ type: 'settings/update', fields: { wakingHours } }),
     }),
     [],
   )
 
-  return { habits: state.habits, completions: state.completions, settings: state.settings, ...actions }
+  return {
+    habits: state.habits,
+    completions: state.completions,
+    daysOff: state.daysOff,
+    settings: state.settings,
+    ...actions,
+  }
 }
