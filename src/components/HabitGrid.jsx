@@ -45,6 +45,11 @@ export default function HabitGrid({ habits, rows, tallies, onToggle, onPickDay }
 }
 
 function Row({ row, habits, onToggle, onPickDay }) {
+  const note = row.dayOff?.note
+  // A future day off has no cells worth drawing — nothing has happened yet — so
+  // its note takes over the cell area instead of sitting under an empty row.
+  const noteInsteadOfCells = Boolean(note) && row.isFuture
+
   return (
     <>
       {/* The date cell is the handle for the whole day: tapping it is how a day
@@ -56,6 +61,7 @@ function Row({ row, habits, onToggle, onPickDay }) {
         data-today={row.isToday || undefined}
         data-dayoff={row.dayOff ? '' : undefined}
         data-future={row.isFuture || undefined}
+        data-hasnote={note ? '' : undefined}
         onClick={() => onPickDay?.(row.key)}
         aria-label={`${row.weekday} ${row.monthDay}${row.dayOff ? `, day off${row.dayOff.note ? `: ${row.dayOff.note}` : ''}` : ''}`}
       >
@@ -64,7 +70,23 @@ function Row({ row, habits, onToggle, onPickDay }) {
         {row.dayOff && <span className="date-off" aria-hidden="true">off</span>}
       </button>
 
-      {row.cells.map((cell, i) => {
+      {noteInsteadOfCells ? (
+        // Spans from the second column to the last. Explicit placement, because
+        // auto-flow would otherwise drop it into the sticky date column.
+        <button
+          type="button"
+          className="grid-note"
+          data-today={row.isToday || undefined}
+          onClick={() => onPickDay?.(row.key)}
+          // The date button already announces the note; repeating it here
+          // would read the day twice.
+          aria-hidden="true"
+          tabIndex={-1}
+        >
+          {note}
+        </button>
+      ) : (
+        row.cells.map((cell, i) => {
         const habit = habits[i]
         // Nothing to tick before a habit existed, and ticking tomorrow is not a
         // thing you can truthfully do.
@@ -75,6 +97,7 @@ function Row({ row, habits, onToggle, onPickDay }) {
             key={cell.habitId}
             data-today={row.isToday || undefined}
             data-dayoff={row.dayOff ? '' : undefined}
+            data-hasnote={note ? '' : undefined}
           >
             {interactive ? (
               <button
@@ -93,7 +116,29 @@ function Row({ row, habits, onToggle, onPickDay }) {
             )}
           </div>
         )
-      })}
+        })
+      )}
+
+      {note && !noteInsteadOfCells && (
+        <>
+          {/* Keeps the day-off tint running under the sticky date column, so
+              the note strip does not leave a pale notch beside it. */}
+          <div className="grid-note-gutter" data-today={row.isToday || undefined} />
+          {/* aria-hidden: the date button already announces the note, and
+              repeating it would read the day twice. Tapping it opens the same
+              sheet as the date, since that is where a reader's finger goes. */}
+          <button
+            type="button"
+            className="grid-note"
+            data-today={row.isToday || undefined}
+            onClick={() => onPickDay?.(row.key)}
+            aria-hidden="true"
+            tabIndex={-1}
+          >
+            {note}
+          </button>
+        </>
+      )}
     </>
   )
 }

@@ -734,3 +734,46 @@ h1 {
   font-size: 1.1rem;
   font-weight: 600;
 }
+
+/* ---------- day-off note in the grid ---------- */
+
+.grid-note {
+  /* Second column through the last. Explicit, so it is never auto-placed into
+     the sticky date column. */
+  grid-column: 2 / -1;
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  text-align: left;
+  color: var(--text);
+  background: color-mix(in srgb, var(--blush) 16%, var(--surface));
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+
+/* Today wins over the day-off tint here too, so the strip stays visually part
+   of the row above it rather than reading as a separate day. */
+.grid-note[data-today],
+.grid-note-gutter[data-today] {
+  background: var(--accent-soft);
+}
+
+.grid-note-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: color-mix(in srgb, var(--blush) 16%, var(--surface));
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+/* Cells and their note strip read as one row, so the divider goes only under
+   the strip. */
+.grid-date[data-hasnote],
+.grid-cell[data-hasnote] {
+  border-bottom: 0;
+}
